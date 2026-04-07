@@ -147,3 +147,52 @@ export const HIGHLIGHTED_CHAINS = [
 export function getTokenIconUrl(chainId: number, address: string, symbol: string): string {
   return `https://assets.smold.app/api/token/${chainId}/${address}/logo.svg`;
 }
+
+// ===== External protocol market URLs =====
+
+const CHAIN_ID_TO_NAME: Record<number, string> = {
+  1: "ethereum",
+  8453: "base",
+  42161: "arbitrum",
+  10: "optimism",
+  480: "worldchain",
+};
+
+const AAVE_MARKET_NAMES: Record<number, string> = {
+  1: "proto_mainnet_v3",
+  8453: "proto_base_v3",
+  42161: "proto_arbitrum_v3",
+  10: "proto_optimism_v3",
+};
+
+/**
+ * Build an external URL to view this market on its native protocol UI.
+ * Returns null if the protocol/chain combo has no known URL pattern.
+ */
+export function getProtocolMarketUrl(
+  protocol: string,
+  chainId: number,
+  marketId: string,
+): string | null {
+  if (protocol === "morpho") {
+    const chainName = CHAIN_ID_TO_NAME[chainId];
+    if (chainName) {
+      return `https://app.morpho.org/${chainName}/market/${marketId}`;
+    }
+    return null;
+  }
+
+  if (protocol === "aave_v3" || protocol === "aave-v3") {
+    // HyperEVM uses a separate UI
+    if (chainId === 999) {
+      return "https://app.hyperlend.finance/markets";
+    }
+    const marketName = AAVE_MARKET_NAMES[chainId];
+    if (marketName) {
+      return `https://app.aave.com/?marketName=${marketName}`;
+    }
+    return null;
+  }
+
+  return null;
+}

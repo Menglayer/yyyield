@@ -11,6 +11,8 @@ import {
   getChainLabel,
   getProtocolLabel,
   getRiskColor,
+  getTokenIconUrl,
+  getProtocolMarketUrl,
   lltvBpsToRatio,
   computeEffectiveLeverageApy,
   computeMaxLeverage,
@@ -26,6 +28,7 @@ import {
   ChevronsUpDown,
   AlertTriangle,
   Info,
+  ExternalLink,
 } from "lucide-react";
 
 type LeverageSortField =
@@ -56,11 +59,14 @@ function deriveRiskLevel(utilization: number, lltv: number): RiskLevel {
 
 interface AugmentedMarket {
   id: string;
+  marketId: string; // raw market id for protocol URL
   protocol: string;
   chainName: string;
   chainId: number;
   loanSymbol: string;
+  loanAddress: string;
   collateralSymbol: string;
+  collateralAddress: string;
   supplyApy: number;
   borrowApy: number;
   effectiveApy: number;
@@ -129,11 +135,14 @@ export default function BorrowPage() {
       const ltvRatio = lltvBpsToRatio(m.lltv);
       return {
         id: `${m.protocol}-${m.id}-${m.chain_id}`,
+        marketId: m.id,
         protocol: m.protocol,
         chainName: m.chain_name,
         chainId: m.chain_id,
         loanSymbol: m.loan_asset.symbol,
+        loanAddress: m.loan_asset.address,
         collateralSymbol: m.collateral_asset?.symbol ?? "",
+        collateralAddress: m.collateral_asset?.address ?? "",
         supplyApy: m.supply_apy,
         borrowApy: m.borrow_apy,
         effectiveApy: computeEffectiveLeverageApy(
@@ -371,10 +380,7 @@ export default function BorrowPage() {
               <thead className="sticky top-0 bg-[var(--bg-card)] z-10">
                 <tr className="border-b border-[var(--border-default)]">
                   <th className="text-left px-4 py-3 font-medium text-xs text-[var(--text-muted)]">
-                    借贷资产
-                  </th>
-                  <th className="text-left px-4 py-3 font-medium text-xs text-[var(--text-muted)]">
-                    抵押资产
+                    借贷对
                   </th>
                   <th className="text-left px-4 py-3 font-medium text-xs text-[var(--text-muted)]">
                     协议 / 链
@@ -430,8 +436,7 @@ export default function BorrowPage() {
                 {loading ? (
                   skeletonKeys.map((k) => (
                     <tr key={k}>
-                      <td className="px-4 py-3"><div className="h-4 w-16 bg-white/5 rounded animate-pulse" /></td>
-                      <td className="px-4 py-3"><div className="h-4 w-16 bg-white/5 rounded animate-pulse" /></td>
+                      <td className="px-4 py-3"><div className="h-4 w-28 bg-white/5 rounded animate-pulse" /></td>
                       <td className="px-4 py-3"><div className="h-4 w-20 bg-white/5 rounded animate-pulse" /></td>
                       <td className="px-4 py-3"><div className="h-4 w-14 bg-white/5 rounded animate-pulse" /></td>
                       <td className="px-4 py-3"><div className="h-4 w-14 bg-white/5 rounded animate-pulse" /></td>
@@ -446,7 +451,7 @@ export default function BorrowPage() {
                 ) : paginated.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={11}
+                      colSpan={10}
                       className="px-4 py-12 text-center text-[var(--text-muted)]"
                     >
                       无匹配结果
@@ -458,21 +463,72 @@ export default function BorrowPage() {
                       key={m.id}
                       className="hover:bg-white/[0.02] transition-colors"
                     >
-                      <td className="px-4 py-3 font-medium text-[var(--text-primary)] whitespace-nowrap">
-                        {m.loanSymbol}
-                      </td>
-                      <td className="px-4 py-3 text-[var(--text-secondary)] whitespace-nowrap">
-                        {m.collateralSymbol || "-"}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <div className="flex -space-x-1.5">
+                            <img
+                              src={getTokenIconUrl(m.chainId, m.loanAddress, m.loanSymbol)}
+                              alt={m.loanSymbol}
+                              className="w-6 h-6 rounded-full border border-[var(--bg-card)] bg-white/5 relative z-10"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).style.display = "none";
+                                const fb = e.currentTarget.nextElementSibling as HTMLElement | null;
+                                if (fb) fb.classList.remove("hidden");
+                              }}
+                            />
+                            <div className="w-6 h-6 rounded-full border border-[var(--bg-card)] bg-blue-500/20 text-blue-400 flex items-center justify-center text-[10px] font-medium hidden relative z-10">
+                              {m.loanSymbol.charAt(0)}
+                            </div>
+                            {m.collateralSymbol && (
+                              <>
+                                <img
+                                  src={getTokenIconUrl(m.chainId, m.collateralAddress, m.collateralSymbol)}
+                                  alt={m.collateralSymbol}
+                                  className="w-6 h-6 rounded-full border border-[var(--bg-card)] bg-white/5 relative z-0"
+                                  onError={(e) => {
+                                    (e.currentTarget as HTMLImageElement).style.display = "none";
+                                    const fb = e.currentTarget.nextElementSibling as HTMLElement | null;
+                                    if (fb) fb.classList.remove("hidden");
+                                  }}
+                                />
+                                <div className="w-6 h-6 rounded-full border border-[var(--bg-card)] bg-orange-500/20 text-orange-400 flex items-center justify-center text-[10px] font-medium hidden relative z-0">
+                                  {m.collateralSymbol.charAt(0)}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                          <span className="font-medium text-[var(--text-primary)]">
+                            {m.collateralSymbol
+                              ? `${m.loanSymbol} / ${m.collateralSymbol}`
+                              : m.loanSymbol}
+                          </span>
+                        </div>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <span className="text-[var(--text-secondary)] text-xs mr-1.5">
-                          {getProtocolLabel(m.protocol)}
-                        </span>
-                        <span
-                          className={`text-xs px-2 py-0.5 rounded border ${getChainColor(m.chainName)}`}
-                        >
-                          {getChainLabel(m.chainName)}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[var(--text-secondary)] text-xs">
+                            {getProtocolLabel(m.protocol)}
+                          </span>
+                          <span
+                            className={`text-xs px-2 py-0.5 rounded border ${getChainColor(m.chainName)}`}
+                          >
+                            {getChainLabel(m.chainName)}
+                          </span>
+                          {(() => {
+                            const url = getProtocolMarketUrl(m.protocol, m.chainId, m.marketId);
+                            return url ? (
+                              <a
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[var(--text-muted)] hover:text-[var(--accent-primary)] transition-colors ml-0.5"
+                                title="在协议中查看"
+                              >
+                                <ExternalLink size={12} />
+                              </a>
+                            ) : null;
+                          })()}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-right text-emerald-400 tabular-nums whitespace-nowrap">
                         {formatApy(m.supplyApy)}

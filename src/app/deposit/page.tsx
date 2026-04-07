@@ -10,6 +10,8 @@ import {
   getChainColor,
   getChainLabel,
   getProtocolLabel,
+  getTokenIconUrl,
+  getProtocolMarketUrl,
   HIGHLIGHTED_CHAINS,
 } from "@/lib/utils";
 import {
@@ -20,6 +22,7 @@ import {
   ChevronRight,
   ChevronsUpDown,
   Info,
+  ExternalLink,
 } from "lucide-react";
 
 type DepositSortField =
@@ -374,18 +377,51 @@ export default function DepositPage() {
                       key={`${m.protocol}-${m.id}-${m.chain_id}`}
                       className="hover:bg-white/[0.02] transition-colors"
                     >
-                      <td className="px-4 py-3 font-medium text-[var(--text-primary)] whitespace-nowrap">
-                        {m.loan_asset.symbol}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <img
+                            src={getTokenIconUrl(m.chain_id, m.loan_asset.address, m.loan_asset.symbol)}
+                            alt={m.loan_asset.symbol}
+                            className="w-6 h-6 rounded-full border border-[var(--bg-card)] bg-white/5"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).style.display = "none";
+                              const fb = e.currentTarget.nextElementSibling as HTMLElement | null;
+                              if (fb) fb.classList.remove("hidden");
+                            }}
+                          />
+                          <div className="w-6 h-6 rounded-full border border-[var(--bg-card)] bg-blue-500/20 text-blue-400 flex items-center justify-center text-[10px] font-medium hidden">
+                            {m.loan_asset.symbol.charAt(0)}
+                          </div>
+                          <span className="font-medium text-[var(--text-primary)]">
+                            {m.loan_asset.symbol}
+                          </span>
+                        </div>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <span className="text-[var(--text-secondary)] text-xs mr-1.5">
-                          {getProtocolLabel(m.protocol)}
-                        </span>
-                        <span
-                          className={`text-xs px-2 py-0.5 rounded border ${getChainColor(m.chain_name)}`}
-                        >
-                          {getChainLabel(m.chain_name)}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[var(--text-secondary)] text-xs">
+                            {getProtocolLabel(m.protocol)}
+                          </span>
+                          <span
+                            className={`text-xs px-2 py-0.5 rounded border ${getChainColor(m.chain_name)}`}
+                          >
+                            {getChainLabel(m.chain_name)}
+                          </span>
+                          {(() => {
+                            const url = getProtocolMarketUrl(m.protocol, m.chain_id, m.id);
+                            return url ? (
+                              <a
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[var(--text-muted)] hover:text-[var(--accent-primary)] transition-colors ml-0.5"
+                                title="在协议中查看"
+                              >
+                                <ExternalLink size={12} />
+                              </a>
+                            ) : null;
+                          })()}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-right text-emerald-400 font-medium tabular-nums whitespace-nowrap">
                         {formatApy(m.supply_apy)}

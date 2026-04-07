@@ -11,6 +11,7 @@ import {
   getChainLabel,
   getProtocolLabel,
   getTokenIconUrl,
+  getProtocolMarketUrl,
   HIGHLIGHTED_CHAINS,
 } from "@/lib/utils";
 import {
@@ -22,12 +23,14 @@ import {
   ChevronsUpDown,
   Info,
   X,
+  ExternalLink,
 } from "lucide-react";
 
 type MarketSortField =
   | "supply_apy"
   | "borrow_apy"
   | "total_supply_usd"
+  | "total_borrow_usd"
   | "liquidity_usd"
   | "utilization";
 
@@ -429,6 +432,12 @@ export default function MarketsPage() {
                     onSort={handleSort}
                   />
                   <SortHeader
+                    label="总借出"
+                    field="total_borrow_usd"
+                    sort={sort}
+                    onSort={handleSort}
+                  />
+                  <SortHeader
                     label="流动性"
                     field="liquidity_usd"
                     sort={sort}
@@ -452,13 +461,14 @@ export default function MarketsPage() {
                       <td className="px-4 py-3"><div className="h-4 w-14 bg-white/5 rounded animate-pulse" /></td>
                       <td className="px-4 py-3"><div className="h-4 w-16 bg-white/5 rounded animate-pulse" /></td>
                       <td className="px-4 py-3"><div className="h-4 w-16 bg-white/5 rounded animate-pulse" /></td>
+                      <td className="px-4 py-3"><div className="h-4 w-16 bg-white/5 rounded animate-pulse" /></td>
                       <td className="px-4 py-3"><div className="h-4 w-12 bg-white/5 rounded animate-pulse" /></td>
                     </tr>
                   ))
                 ) : paginated.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={8}
                       className="px-4 py-12 text-center text-[var(--text-muted)]"
                     >
                       没有找到符合条件的市场
@@ -512,14 +522,30 @@ export default function MarketsPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <span className="text-[var(--text-secondary)] text-xs mr-1.5">
-                          {getProtocolLabel(m.protocol)}
-                        </span>
-                        <span
-                          className={`text-xs px-2 py-0.5 rounded border ${getChainColor(m.chain_name)}`}
-                        >
-                          {getChainLabel(m.chain_name)}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[var(--text-secondary)] text-xs">
+                            {getProtocolLabel(m.protocol)}
+                          </span>
+                          <span
+                            className={`text-xs px-2 py-0.5 rounded border ${getChainColor(m.chain_name)}`}
+                          >
+                            {getChainLabel(m.chain_name)}
+                          </span>
+                          {(() => {
+                            const url = getProtocolMarketUrl(m.protocol, m.chain_id, m.id);
+                            return url ? (
+                              <a
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[var(--text-muted)] hover:text-[var(--accent-primary)] transition-colors ml-0.5"
+                                title="在协议中查看"
+                              >
+                                <ExternalLink size={12} />
+                              </a>
+                            ) : null;
+                          })()}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-right text-emerald-400 font-medium tabular-nums whitespace-nowrap">
                         {formatApy(m.supply_apy)}
@@ -533,6 +559,11 @@ export default function MarketsPage() {
                       </td>
                       <td className="px-4 py-3 text-right text-[var(--text-secondary)] tabular-nums whitespace-nowrap">
                         {formatUsd(m.total_supply_usd)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-[var(--text-secondary)] tabular-nums whitespace-nowrap">
+                        {m.total_borrow_usd > 0 ? formatUsd(m.total_borrow_usd) : (
+                          <span className="text-[var(--text-muted)]">-</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right text-[var(--text-secondary)] tabular-nums whitespace-nowrap">
                         {formatUsd(m.liquidity_usd)}
