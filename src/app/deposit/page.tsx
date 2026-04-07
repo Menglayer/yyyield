@@ -3,7 +3,6 @@
 import { useState, useMemo, useCallback } from "react";
 import AppSidebar from "@/components/AppSidebar";
 import { useYieldzMarkets, useYieldzFeeInfo } from "@/lib/hooks";
-import type { YieldzMarket } from "@/lib/types";
 import {
   formatUsd,
   formatApy,
@@ -25,7 +24,9 @@ import {
 
 type DepositSortField =
   | "supply_apy"
+  | "borrow_apy"
   | "total_supply_usd"
+  | "total_borrow_usd"
   | "liquidity_usd"
   | "utilization";
 
@@ -168,7 +169,7 @@ export default function DepositPage() {
           存款策略
         </h1>
         <p className="text-sm text-[var(--text-secondary)] mb-6">
-          浏览 Aave V3 与 Morpho 的纯存款市场，比较供应 APY 与流动性
+          浏览 Aave V3 与 Morpho 的存款市场，比较供应 APY、借款 APY 与流动性
         </p>
 
         {error && (
@@ -307,10 +308,7 @@ export default function DepositPage() {
                     资产
                   </th>
                   <th className="text-left px-4 py-3 font-medium text-xs text-[var(--text-muted)]">
-                    协议
-                  </th>
-                  <th className="text-left px-4 py-3 font-medium text-xs text-[var(--text-muted)]">
-                    链
+                    协议 / 链
                   </th>
                   <SortHeader
                     label="供应 APY"
@@ -319,8 +317,20 @@ export default function DepositPage() {
                     onSort={handleSort}
                   />
                   <SortHeader
-                    label="TVL"
+                    label="借款 APY"
+                    field="borrow_apy"
+                    sort={sort}
+                    onSort={handleSort}
+                  />
+                  <SortHeader
+                    label="总供应"
                     field="total_supply_usd"
+                    sort={sort}
+                    onSort={handleSort}
+                  />
+                  <SortHeader
+                    label="总借出"
+                    field="total_borrow_usd"
                     sort={sort}
                     onSort={handleSort}
                   />
@@ -343,9 +353,10 @@ export default function DepositPage() {
                   skeletonKeys.map((k) => (
                     <tr key={k}>
                       <td className="px-4 py-3"><div className="h-4 w-20 bg-white/5 rounded animate-pulse" /></td>
+                      <td className="px-4 py-3"><div className="h-4 w-24 bg-white/5 rounded animate-pulse" /></td>
+                      <td className="px-4 py-3"><div className="h-4 w-14 bg-white/5 rounded animate-pulse" /></td>
+                      <td className="px-4 py-3"><div className="h-4 w-14 bg-white/5 rounded animate-pulse" /></td>
                       <td className="px-4 py-3"><div className="h-4 w-16 bg-white/5 rounded animate-pulse" /></td>
-                      <td className="px-4 py-3"><div className="h-4 w-14 bg-white/5 rounded animate-pulse" /></td>
-                      <td className="px-4 py-3"><div className="h-4 w-14 bg-white/5 rounded animate-pulse" /></td>
                       <td className="px-4 py-3"><div className="h-4 w-16 bg-white/5 rounded animate-pulse" /></td>
                       <td className="px-4 py-3"><div className="h-4 w-16 bg-white/5 rounded animate-pulse" /></td>
                       <td className="px-4 py-3"><div className="h-4 w-12 bg-white/5 rounded animate-pulse" /></td>
@@ -353,7 +364,7 @@ export default function DepositPage() {
                   ))
                 ) : paginated.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-12 text-center text-[var(--text-muted)]">
+                    <td colSpan={8} className="px-4 py-12 text-center text-[var(--text-muted)]">
                       无匹配结果
                     </td>
                   </tr>
@@ -366,10 +377,10 @@ export default function DepositPage() {
                       <td className="px-4 py-3 font-medium text-[var(--text-primary)] whitespace-nowrap">
                         {m.loan_asset.symbol}
                       </td>
-                      <td className="px-4 py-3 text-[var(--text-secondary)] whitespace-nowrap">
-                        {getProtocolLabel(m.protocol)}
-                      </td>
                       <td className="px-4 py-3 whitespace-nowrap">
+                        <span className="text-[var(--text-secondary)] text-xs mr-1.5">
+                          {getProtocolLabel(m.protocol)}
+                        </span>
                         <span
                           className={`text-xs px-2 py-0.5 rounded border ${getChainColor(m.chain_name)}`}
                         >
@@ -379,8 +390,18 @@ export default function DepositPage() {
                       <td className="px-4 py-3 text-right text-emerald-400 font-medium tabular-nums whitespace-nowrap">
                         {formatApy(m.supply_apy)}
                       </td>
+                      <td className="px-4 py-3 text-right text-red-400 tabular-nums whitespace-nowrap">
+                        {m.borrow_apy > 0 ? formatApy(m.borrow_apy) : (
+                          <span className="text-[var(--text-muted)]">-</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-right text-[var(--text-secondary)] tabular-nums whitespace-nowrap">
                         {formatUsd(m.total_supply_usd)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-[var(--text-secondary)] tabular-nums whitespace-nowrap">
+                        {m.total_borrow_usd > 0 ? formatUsd(m.total_borrow_usd) : (
+                          <span className="text-[var(--text-muted)]">-</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right text-[var(--text-secondary)] tabular-nums whitespace-nowrap">
                         {formatUsd(m.liquidity_usd)}

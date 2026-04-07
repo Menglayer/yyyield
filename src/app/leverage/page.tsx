@@ -33,6 +33,7 @@ type LeverageSortField =
   | "borrowApy"
   | "effectiveApy"
   | "totalSupplyUsd"
+  | "liquidityUsd"
   | "utilization"
   | "lltv";
 
@@ -414,6 +415,12 @@ export default function LeveragePage() {
                     sort={sort}
                     onSort={handleSort}
                   />
+                  <SortHeader
+                    label="流动性"
+                    field="liquidityUsd"
+                    sort={sort}
+                    onSort={handleSort}
+                  />
                   <th className="text-center px-4 py-3 font-medium text-xs text-[var(--text-muted)]">
                     风险
                   </th>
@@ -432,13 +439,14 @@ export default function LeveragePage() {
                       <td className="px-4 py-3"><div className="h-4 w-12 bg-white/5 rounded animate-pulse" /></td>
                       <td className="px-4 py-3"><div className="h-4 w-12 bg-white/5 rounded animate-pulse" /></td>
                       <td className="px-4 py-3"><div className="h-4 w-14 bg-white/5 rounded animate-pulse" /></td>
+                      <td className="px-4 py-3"><div className="h-4 w-14 bg-white/5 rounded animate-pulse" /></td>
                       <td className="px-4 py-3"><div className="h-4 w-10 bg-white/5 rounded animate-pulse" /></td>
                     </tr>
                   ))
                 ) : paginated.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={10}
+                      colSpan={11}
                       className="px-4 py-12 text-center text-[var(--text-muted)]"
                     >
                       无匹配结果
@@ -510,6 +518,9 @@ export default function LeveragePage() {
                       </td>
                       <td className="px-4 py-3 text-right text-[var(--text-secondary)] tabular-nums whitespace-nowrap">
                         {formatUsd(m.totalSupplyUsd)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-[var(--text-secondary)] tabular-nums whitespace-nowrap">
+                        {formatUsd(m.liquidityUsd)}
                       </td>
                       <td className="px-4 py-3 text-center whitespace-nowrap">
                         <span

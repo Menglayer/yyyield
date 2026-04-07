@@ -296,6 +296,11 @@ export function useDashboardStats() {
 
 // ===== Yieldz Markets =====
 
+// Data quality thresholds
+const MIN_TVL_USD = 1000; // skip dust pools < $1K
+const MAX_SUPPLY_APY = 1000; // skip expired/broken markets with insane APY
+const MAX_UTILIZATION = 0.995; // skip fully utilized (no liquidity)
+
 let yieldzCache: YieldzMarket[] | null = null;
 let yieldzCacheTime = 0;
 
@@ -342,15 +347,30 @@ export function useYieldzMarkets(mode: "deposit" | "leverage" | "all" = "all") {
   }, []);
 
   const markets = useMemo(() => {
+    // Base quality filter: skip dust, expired, and fully utilized markets
+    let result = allMarkets.filter(
+      (m) =>
+        m.total_supply_usd >= MIN_TVL_USD &&
+        m.supply_apy < MAX_SUPPLY_APY &&
+        m.utilization < MAX_UTILIZATION,
+    );
+
     if (mode === "deposit") {
-      return allMarkets.filter((m) => m.collateral_asset === null);
-    }
-    if (mode === "leverage") {
-      return allMarkets.filter(
-        (m) => m.collateral_asset !== null && Number(m.lltv) > 0,
+      // Pure supply-side markets: must have no collateral, must have positive yield
+      result = result.filter(
+        (m) => m.collateral_asset === null && m.supply_apy > 0,
+      );
+    } else if (mode === "leverage") {
+      // Borrowing markets: must have collateral, LLTV > 0, and some liquidity
+      result = result.filter(
+        (m) =>
+          m.collateral_asset !== null &&
+          Number(m.lltv) > 0 &&
+          m.liquidity_usd > 0,
       );
     }
-    return allMarkets;
+
+    return result;
   }, [allMarkets, mode]);
 
   const uniqueChains = useMemo(() => {
