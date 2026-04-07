@@ -356,10 +356,10 @@ export function useYieldzMarkets(mode: "deposit" | "leverage" | "all" = "all") {
     );
 
     if (mode === "deposit") {
-      // Pure supply-side markets: must have no collateral, must have positive yield
-      result = result.filter(
-        (m) => m.collateral_asset === null && m.supply_apy > 0,
-      );
+      // Pure supply-side markets: no collateral required
+      // Note: Morpho vault deposits often show supply_apy=0 at market level
+      // (yield is allocated at vault level), so we do NOT filter by supply_apy > 0
+      result = result.filter((m) => m.collateral_asset === null);
     } else if (mode === "leverage") {
       // Borrowing markets: must have collateral, LLTV > 0, and some liquidity
       result = result.filter(
