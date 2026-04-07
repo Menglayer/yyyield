@@ -1,16 +1,16 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useMemo, useCallback } from "react";
 import AppSidebar from "@/components/AppSidebar";
-import { useYieldPools } from "@/lib/hooks";
-import type { PoolFilters, SortConfig, SortField, YieldPool } from "@/lib/types";
+import { useYieldzMarkets, useYieldzFeeInfo } from "@/lib/hooks";
 import {
   formatUsd,
   formatApy,
+  formatPercent,
   getChainColor,
   getChainLabel,
   getProtocolLabel,
-  getApyChangeColor,
+  getTokenIconUrl,
   HIGHLIGHTED_CHAINS,
 } from "@/lib/utils";
 import {
@@ -20,108 +20,39 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsUpDown,
+  Info,
+  X,
 } from "lucide-react";
 
-// ===== Expandable Row Detail =====
+type MarketSortField =
+  | "supply_apy"
+  | "borrow_apy"
+  | "total_supply_usd"
+  | "liquidity_usd"
+  | "utilization";
 
-function PoolDetail({ pool }: { pool: YieldPool }) {
-  return (
-    <tr>
-      <td
-        colSpan={8}
-        className="px-6 py-4 bg-[var(--bg-elevated)] border-b border-[var(--border-default)]"
-      >
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-          <div>
-            <span className="text-[var(--text-muted)] block mb-1">基础 APY</span>
-            <span className="text-[var(--text-primary)] tabular-nums">
-              {formatApy(pool.apyBase)}
-            </span>
-          </div>
-          <div>
-            <span className="text-[var(--text-muted)] block mb-1">奖励 APY</span>
-            <span className="text-[var(--text-primary)] tabular-nums">
-              {formatApy(pool.apyReward)}
-            </span>
-          </div>
-          <div>
-            <span className="text-[var(--text-muted)] block mb-1">30 天均值</span>
-            <span className="text-[var(--text-primary)] tabular-nums">
-              {formatApy(pool.apyMean30d)}
-            </span>
-          </div>
-          <div>
-            <span className="text-[var(--text-muted)] block mb-1">敞口类型</span>
-            <span className="text-[var(--text-primary)]">
-              {pool.exposure === "single" ? "单一" : "多重"}
-            </span>
-          </div>
-          <div>
-            <span className="text-[var(--text-muted)] block mb-1">1 日变化</span>
-            <span className={`tabular-nums ${getApyChangeColor(pool.apyPct1D)}`}>
-              {pool.apyPct1D != null ? `${pool.apyPct1D > 0 ? "+" : ""}${pool.apyPct1D.toFixed(2)}%` : "-"}
-            </span>
-          </div>
-          <div>
-            <span className="text-[var(--text-muted)] block mb-1">7 日变化</span>
-            <span className={`tabular-nums ${getApyChangeColor(pool.apyPct7D)}`}>
-              {pool.apyPct7D != null ? `${pool.apyPct7D > 0 ? "+" : ""}${pool.apyPct7D.toFixed(2)}%` : "-"}
-            </span>
-          </div>
-          <div>
-            <span className="text-[var(--text-muted)] block mb-1">稳定币</span>
-            <span className="text-[var(--text-primary)]">
-              {pool.stablecoin ? "是" : "否"}
-            </span>
-          </div>
-          <div>
-            <span className="text-[var(--text-muted)] block mb-1">无常损失</span>
-            <span className="text-[var(--text-primary)]">
-              {pool.ilRisk === "no" ? "无" : "有"}
-            </span>
-          </div>
-          {pool.rewardTokens && pool.rewardTokens.length > 0 && (
-            <div className="col-span-2 md:col-span-4">
-              <span className="text-[var(--text-muted)] block mb-1">奖励代币</span>
-              <div className="flex flex-wrap gap-1">
-                {pool.rewardTokens.map((t) => (
-                  <span
-                    key={t}
-                    className="text-xs px-2 py-0.5 rounded bg-white/5 text-[var(--text-secondary)] border border-[var(--border-default)]"
-                  >
-                    {t}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </td>
-    </tr>
-  );
+interface MarketSortConfig {
+  field: MarketSortField;
+  direction: "asc" | "desc";
 }
-
-// ===== Sort Header =====
 
 function SortHeader({
   label,
   field,
   sort,
   onSort,
-  align = "right",
 }: {
   label: string;
-  field: SortField;
-  sort: SortConfig;
-  onSort: (field: SortField) => void;
-  align?: "left" | "right";
+  field: MarketSortField;
+  sort: MarketSortConfig;
+  onSort: (field: MarketSortField) => void;
 }) {
   const active = sort.field === field;
   return (
     <th
-      className={`px-4 py-3 font-medium text-xs cursor-pointer select-none hover:text-[var(--text-primary)] transition-colors ${
-        align === "right" ? "text-right" : "text-left"
-      } ${active ? "text-[var(--accent-primary)]" : "text-[var(--text-muted)]"}`}
+      className={`px-4 py-3 font-medium text-xs text-right cursor-pointer select-none hover:text-[var(--text-primary)] transition-colors ${
+        active ? "text-[var(--accent-primary)]" : "text-[var(--text-muted)]"
+      }`}
       onClick={() => onSort(field)}
     >
       <span className="inline-flex items-center gap-1">
@@ -140,86 +71,145 @@ function SortHeader({
   );
 }
 
-// ===== Skeleton =====
-
-function TableSkeleton() {
-  const rows = ["sk-1", "sk-2", "sk-3", "sk-4", "sk-5", "sk-6", "sk-7", "sk-8", "sk-9", "sk-10"];
-  return (
-    <>
-      {rows.map((k) => (
-        <tr key={k}>
-          <td className="px-4 py-3"><div className="h-4 w-20 bg-white/5 rounded animate-pulse" /></td>
-          <td className="px-4 py-3"><div className="h-4 w-16 bg-white/5 rounded animate-pulse" /></td>
-          <td className="px-4 py-3"><div className="h-4 w-14 bg-white/5 rounded animate-pulse" /></td>
-          <td className="px-4 py-3"><div className="h-4 w-14 bg-white/5 rounded animate-pulse" /></td>
-          <td className="px-4 py-3"><div className="h-4 w-16 bg-white/5 rounded animate-pulse" /></td>
-          <td className="px-4 py-3"><div className="h-4 w-14 bg-white/5 rounded animate-pulse" /></td>
-          <td className="px-4 py-3"><div className="h-4 w-10 bg-white/5 rounded animate-pulse" /></td>
-          <td className="px-4 py-3"><div className="h-4 w-10 bg-white/5 rounded animate-pulse" /></td>
-        </tr>
-      ))}
-    </>
-  );
-}
-
-// ===== Main Page =====
-
 export default function MarketsPage() {
-  const [filters, setFilters] = useState<PoolFilters>({});
-  const [sort, setSort] = useState<SortConfig>({
-    field: "tvlUsd",
+  const { markets, loading, error, uniqueChains, uniqueProtocols } =
+    useYieldzMarkets("all");
+  const { feeInfo } = useYieldzFeeInfo();
+
+  const [search, setSearch] = useState("");
+  const [selectedChains, setSelectedChains] = useState<string[]>([]);
+  const [selectedProtocol, setSelectedProtocol] = useState<string | null>(null);
+  const [marketType, setMarketType] = useState<string>("all");
+  const [sort, setSort] = useState<MarketSortConfig>({
+    field: "supply_apy",
     direction: "desc",
   });
   const [page, setPage] = useState(1);
-  const [expandedPool, setExpandedPool] = useState<string | null>(null);
   const [chainOpen, setChainOpen] = useState(false);
+  const pageSize = 50;
 
-  const { pools, totalFiltered, totalPages, loading, error, uniqueChains } =
-    useYieldPools(filters, sort, page, 50);
+  const hasActiveFilters =
+    search !== "" ||
+    selectedChains.length > 0 ||
+    selectedProtocol !== null ||
+    marketType !== "all";
 
-  const handleSort = useCallback(
-    (field: SortField) => {
-      setSort((prev) => ({
-        field,
-        direction:
-          prev.field === field && prev.direction === "desc" ? "asc" : "desc",
-      }));
-      setPage(1);
-    },
-    [],
-  );
+  // Filter
+  const filtered = useMemo(() => {
+    let result = markets;
 
-  const handleSearch = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setFilters((prev) => ({ ...prev, search: e.target.value || undefined }));
+    if (selectedChains.length > 0) {
+      const chains = new Set(selectedChains);
+      result = result.filter((m) => chains.has(m.chain_name));
+    }
+
+    if (selectedProtocol) {
+      result = result.filter((m) => m.protocol === selectedProtocol);
+    }
+
+    if (marketType === "borrow") {
+      result = result.filter((m) => m.collateral_asset !== null);
+    } else if (marketType === "deposit") {
+      result = result.filter((m) => m.collateral_asset === null);
+    }
+
+    if (search) {
+      const q = search.toLowerCase();
+      result = result.filter(
+        (m) =>
+          m.loan_asset.symbol.toLowerCase().includes(q) ||
+          (m.collateral_asset?.symbol.toLowerCase().includes(q)) ||
+          m.chain_name.toLowerCase().includes(q) ||
+          m.protocol.toLowerCase().includes(q),
+      );
+    }
+
+    return result;
+  }, [markets, selectedChains, selectedProtocol, marketType, search]);
+
+  // Sort
+  const sorted = useMemo(() => {
+    const arr = [...filtered];
+    const dir = sort.direction === "asc" ? 1 : -1;
+    arr.sort((a, b) => {
+      const va = a[sort.field] ?? 0;
+      const vb = b[sort.field] ?? 0;
+      return (va - vb) * dir;
+    });
+    return arr;
+  }, [filtered, sort]);
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+  const paginated = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return sorted.slice(start, start + pageSize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sorted, page]);
+
+  // Stats
+  const stats = useMemo(() => {
+    if (!filtered.length)
+      return { count: 0, tvl: 0, avgSupplyApy: 0, avgBorrowApy: 0 };
+    const tvl = filtered.reduce((sum, m) => sum + m.total_supply_usd, 0);
+    const avgSupply =
+      filtered.reduce((sum, m) => sum + m.supply_apy, 0) / filtered.length;
+    const borrowMarkets = filtered.filter((m) => m.borrow_apy > 0);
+    const avgBorrow =
+      borrowMarkets.length > 0
+        ? borrowMarkets.reduce((sum, m) => sum + m.borrow_apy, 0) /
+          borrowMarkets.length
+        : 0;
+    return { count: filtered.length, tvl, avgSupplyApy: avgSupply, avgBorrowApy: avgBorrow };
+  }, [filtered]);
+
+  const handleSort = useCallback((field: MarketSortField) => {
+    setSort((prev) => ({
+      field,
+      direction:
+        prev.field === field && prev.direction === "desc" ? "asc" : "desc",
+    }));
     setPage(1);
   }, []);
 
   const toggleChain = useCallback((chain: string) => {
-    setFilters((prev) => {
-      const current = prev.chains ?? [];
-      const next = current.includes(chain)
-        ? current.filter((c) => c !== chain)
-        : [...current, chain];
-      return { ...prev, chains: next.length > 0 ? next : undefined };
+    setSelectedChains((prev) => {
+      const next = prev.includes(chain)
+        ? prev.filter((c) => c !== chain)
+        : [...prev, chain];
+      return next;
     });
     setPage(1);
   }, []);
 
-  const toggleExposure = useCallback((exposure: "single" | "multi" | null) => {
-    setFilters((prev) => ({ ...prev, exposure }));
+  const clearAllFilters = useCallback(() => {
+    setSearch("");
+    setSelectedChains([]);
+    setSelectedProtocol(null);
+    setMarketType("all");
     setPage(1);
   }, []);
 
-  // Show highlighted chains first, then others
-  const sortedChains = [...HIGHLIGHTED_CHAINS.filter((c) => uniqueChains.includes(c))];
-  const otherChains = uniqueChains.filter((c) => !HIGHLIGHTED_CHAINS.includes(c));
+  const sortedChains = HIGHLIGHTED_CHAINS.filter((c) =>
+    uniqueChains.includes(c),
+  );
+  const otherChains = uniqueChains.filter(
+    (c) => !HIGHLIGHTED_CHAINS.includes(c),
+  );
+
+  const skeletonKeys = [
+    "ms-1", "ms-2", "ms-3", "ms-4", "ms-5",
+    "ms-6", "ms-7", "ms-8", "ms-9", "ms-10",
+  ];
 
   return (
     <AppSidebar>
       <div className="max-w-full mx-auto">
-        <h1 className="text-2xl md:text-3xl font-bold text-[var(--text-primary)] mb-6">
+        <h1 className="text-2xl md:text-3xl font-bold text-[var(--text-primary)] mb-2">
           全部市场
         </h1>
+        <p className="text-sm text-[var(--text-secondary)] mb-6">
+          查看和筛选所有 DeFi 借贷和存款市场，实时对比各协议收益率
+        </p>
 
         {error && (
           <div className="mb-4 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
@@ -227,9 +217,43 @@ export default function MarketsPage() {
           </div>
         )}
 
+        {feeInfo && (
+          <div className="mb-4 p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-default)] flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+            <Info size={14} className="text-[var(--accent-primary)] shrink-0" />
+            <span>{feeInfo.description}</span>
+          </div>
+        )}
+
+        {/* Stats row */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+          <div className="p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border-default)]">
+            <div className="text-xs text-[var(--text-muted)] mb-1">总市场数</div>
+            <div className="text-xl font-bold text-[var(--text-primary)]">
+              {loading ? "..." : stats.count.toLocaleString()}
+            </div>
+          </div>
+          <div className="p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border-default)]">
+            <div className="text-xs text-[var(--text-muted)] mb-1">总 TVL</div>
+            <div className="text-xl font-bold text-[var(--text-primary)]">
+              {loading ? "..." : formatUsd(stats.tvl)}
+            </div>
+          </div>
+          <div className="p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border-default)]">
+            <div className="text-xs text-[var(--text-muted)] mb-1">平均供应 APY</div>
+            <div className="text-xl font-bold text-emerald-400">
+              {loading ? "..." : formatApy(stats.avgSupplyApy)}
+            </div>
+          </div>
+          <div className="p-4 rounded-xl bg-[var(--bg-card)] border border-[var(--border-default)]">
+            <div className="text-xs text-[var(--text-muted)] mb-1">平均借款 APY</div>
+            <div className="text-xl font-bold text-red-400">
+              {loading ? "..." : formatApy(stats.avgBorrowApy)}
+            </div>
+          </div>
+        </div>
+
         {/* Filter Bar */}
         <div className="flex flex-col md:flex-row gap-3 mb-6">
-          {/* Search */}
           <div className="relative flex-1 max-w-sm">
             <Search
               size={16}
@@ -237,8 +261,12 @@ export default function MarketsPage() {
             />
             <input
               type="text"
-              placeholder="搜索代币 / 协议 / 链..."
-              onChange={handleSearch}
+              placeholder="搜索资产 / 协议 / 链..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
               className="w-full pl-9 pr-4 py-2.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border-default)] text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)]"
             />
           </div>
@@ -251,9 +279,9 @@ export default function MarketsPage() {
               className="px-4 py-2.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border-default)] text-sm text-[var(--text-secondary)] flex items-center gap-2 hover:border-[var(--border-hover)] transition-colors"
             >
               链
-              {filters.chains && filters.chains.length > 0 && (
+              {selectedChains.length > 0 && (
                 <span className="text-xs bg-[var(--accent-primary)]/20 text-[var(--accent-primary)] px-1.5 rounded">
-                  {filters.chains.length}
+                  {selectedChains.length}
                 </span>
               )}
               <ChevronDown size={14} />
@@ -266,7 +294,7 @@ export default function MarketsPage() {
                     key={chain}
                     onClick={() => toggleChain(chain)}
                     className={`w-full text-left px-3 py-1.5 rounded text-sm transition-colors ${
-                      filters.chains?.includes(chain)
+                      selectedChains.includes(chain)
                         ? "bg-[var(--accent-primary)]/10 text-[var(--accent-primary)]"
                         : "text-[var(--text-secondary)] hover:bg-white/5"
                     }`}
@@ -283,7 +311,7 @@ export default function MarketsPage() {
                         key={chain}
                         onClick={() => toggleChain(chain)}
                         className={`w-full text-left px-3 py-1.5 rounded text-sm transition-colors ${
-                          filters.chains?.includes(chain)
+                          selectedChains.includes(chain)
                             ? "bg-[var(--accent-primary)]/10 text-[var(--accent-primary)]"
                             : "text-[var(--text-secondary)] hover:bg-white/5"
                         }`}
@@ -297,50 +325,77 @@ export default function MarketsPage() {
             )}
           </div>
 
-          {/* Exposure toggle */}
+          {/* Protocol filter */}
           <div className="flex items-center gap-1 bg-[var(--bg-card)] border border-[var(--border-default)] rounded-lg p-1">
-            {([
-              { label: "全部", value: null },
-              { label: "单一", value: "single" as const },
-              { label: "多重", value: "multi" as const },
-            ]).map((opt) => (
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedProtocol(null);
+                setPage(1);
+              }}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                selectedProtocol === null
+                  ? "bg-[var(--accent-primary)]/10 text-[var(--accent-primary)]"
+                  : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              }`}
+            >
+              全部
+            </button>
+            {uniqueProtocols.map((p) => (
               <button
                 type="button"
-                key={opt.label}
-                onClick={() => toggleExposure(opt.value)}
+                key={p}
+                onClick={() => {
+                  setSelectedProtocol(p);
+                  setPage(1);
+                }}
                 className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                  filters.exposure === opt.value
+                  selectedProtocol === p
                     ? "bg-[var(--accent-primary)]/10 text-[var(--accent-primary)]"
                     : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                 }`}
               >
-                {opt.label}
+                {getProtocolLabel(p)}
               </button>
             ))}
           </div>
 
-          {/* Stablecoin toggle */}
-          <button
-            type="button"
-            onClick={() =>
-              setFilters((prev) => ({
-                ...prev,
-                stablecoinOnly: !prev.stablecoinOnly,
-              }))
-            }
-            className={`px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
-              filters.stablecoinOnly
-                ? "bg-[var(--accent-primary)]/10 border-[var(--accent-primary)]/30 text-[var(--accent-primary)]"
-                : "bg-[var(--bg-card)] border-[var(--border-default)] text-[var(--text-secondary)]"
-            }`}
-          >
-            稳定币
-          </button>
+          {/* Market type filter */}
+          <div className="flex items-center gap-1 bg-[var(--bg-card)] border border-[var(--border-default)] rounded-lg p-1">
+            {(["all", "borrow", "deposit"] as const).map((type) => (
+              <button
+                type="button"
+                key={type}
+                onClick={() => {
+                  setMarketType(type);
+                  setPage(1);
+                }}
+                className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                  marketType === type
+                    ? "bg-[var(--accent-primary)]/10 text-[var(--accent-primary)]"
+                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                {type === "all" ? "全部" : type === "borrow" ? "借贷" : "存款"}
+              </button>
+            ))}
+          </div>
+
+          {/* Clear filters */}
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={clearAllFilters}
+              className="flex items-center gap-1 px-3 py-1.5 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+            >
+              <X size={14} />
+              清除筛选
+            </button>
+          )}
         </div>
 
-        {/* Results count */}
         <div className="text-xs text-[var(--text-muted)] mb-3">
-          共 {loading ? "..." : totalFiltered.toLocaleString()} 个池
+          共 {loading ? "..." : sorted.length.toLocaleString()} 个市场
         </div>
 
         {/* Table */}
@@ -353,106 +408,163 @@ export default function MarketsPage() {
                     资产
                   </th>
                   <th className="text-left px-4 py-3 font-medium text-xs text-[var(--text-muted)]">
-                    协议
-                  </th>
-                  <th className="text-left px-4 py-3 font-medium text-xs text-[var(--text-muted)]">
-                    链
+                    协议 / 链
                   </th>
                   <SortHeader
-                    label="APY"
-                    field="apy"
+                    label="供应 APY"
+                    field="supply_apy"
+                    sort={sort}
+                    onSort={handleSort}
+                  />
+                  <SortHeader
+                    label="借款 APY"
+                    field="borrow_apy"
                     sort={sort}
                     onSort={handleSort}
                   />
                   <SortHeader
                     label="TVL"
-                    field="tvlUsd"
+                    field="total_supply_usd"
                     sort={sort}
                     onSort={handleSort}
                   />
                   <SortHeader
-                    label="基础 APY"
-                    field="apyBase"
+                    label="流动性"
+                    field="liquidity_usd"
                     sort={sort}
                     onSort={handleSort}
                   />
                   <SortHeader
-                    label="7日变化"
-                    field="apyPct7D"
+                    label="利用率"
+                    field="utilization"
                     sort={sort}
                     onSort={handleSort}
                   />
-                  <th className="text-left px-4 py-3 font-medium text-xs text-[var(--text-muted)]">
-                    敞口
-                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border-default)]">
                 {loading ? (
-                  <TableSkeleton />
-                ) : pools.length === 0 ? (
+                  skeletonKeys.map((k) => (
+                    <tr key={k}>
+                      <td className="px-4 py-3"><div className="h-4 w-28 bg-white/5 rounded animate-pulse" /></td>
+                      <td className="px-4 py-3"><div className="h-4 w-24 bg-white/5 rounded animate-pulse" /></td>
+                      <td className="px-4 py-3"><div className="h-4 w-14 bg-white/5 rounded animate-pulse" /></td>
+                      <td className="px-4 py-3"><div className="h-4 w-14 bg-white/5 rounded animate-pulse" /></td>
+                      <td className="px-4 py-3"><div className="h-4 w-16 bg-white/5 rounded animate-pulse" /></td>
+                      <td className="px-4 py-3"><div className="h-4 w-16 bg-white/5 rounded animate-pulse" /></td>
+                      <td className="px-4 py-3"><div className="h-4 w-12 bg-white/5 rounded animate-pulse" /></td>
+                    </tr>
+                  ))
+                ) : paginated.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={7}
                       className="px-4 py-12 text-center text-[var(--text-muted)]"
                     >
-                      无匹配结果
+                      没有找到符合条件的市场
                     </td>
                   </tr>
                 ) : (
-                  pools.map((pool) => (
-                    <>
-                      <tr
-                        key={pool.pool}
-                        className="hover:bg-white/[0.02] cursor-pointer transition-colors"
-                        onClick={() =>
-                          setExpandedPool(
-                            expandedPool === pool.pool ? null : pool.pool,
-                          )
-                        }
-                      >
-                        <td className="px-4 py-3 font-medium text-[var(--text-primary)] whitespace-nowrap">
-                          {pool.symbol}
-                          {pool.stablecoin && (
-                            <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                              稳定
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-[var(--text-secondary)] whitespace-nowrap">
-                          {getProtocolLabel(pool.project)}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <span
-                            className={`text-xs px-2 py-0.5 rounded border ${getChainColor(pool.chain)}`}
-                          >
-                            {getChainLabel(pool.chain)}
+                  paginated.map((m) => (
+                    <tr
+                      key={`${m.protocol}-${m.id}-${m.chain_id}`}
+                      className="hover:bg-white/[0.02] transition-colors"
+                    >
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="flex items-center gap-2">
+                          <div className="flex -space-x-1.5">
+                            <img
+                              src={getTokenIconUrl(m.chain_id, m.loan_asset.address, m.loan_asset.symbol)}
+                              alt={m.loan_asset.symbol}
+                              className="w-6 h-6 rounded-full border border-[var(--bg-card)] bg-white/5 relative z-10"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).style.display = "none";
+                                const fb = e.currentTarget.nextElementSibling as HTMLElement | null;
+                                if (fb) fb.classList.remove("hidden");
+                              }}
+                            />
+                            <div className="w-6 h-6 rounded-full border border-[var(--bg-card)] bg-blue-500/20 text-blue-400 flex items-center justify-center text-[10px] font-medium hidden relative z-10">
+                              {m.loan_asset.symbol.charAt(0)}
+                            </div>
+                            {m.collateral_asset && (
+                              <>
+                                <img
+                                  src={getTokenIconUrl(m.chain_id, m.collateral_asset.address, m.collateral_asset.symbol)}
+                                  alt={m.collateral_asset.symbol}
+                                  className="w-6 h-6 rounded-full border border-[var(--bg-card)] bg-white/5 relative z-0"
+                                  onError={(e) => {
+                                    (e.currentTarget as HTMLImageElement).style.display = "none";
+                                    const fb = e.currentTarget.nextElementSibling as HTMLElement | null;
+                                    if (fb) fb.classList.remove("hidden");
+                                  }}
+                                />
+                                <div className="w-6 h-6 rounded-full border border-[var(--bg-card)] bg-orange-500/20 text-orange-400 flex items-center justify-center text-[10px] font-medium hidden relative z-0">
+                                  {m.collateral_asset.symbol.charAt(0)}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                          <span className="font-medium text-[var(--text-primary)]">
+                            {m.collateral_asset
+                              ? `${m.loan_asset.symbol} / ${m.collateral_asset.symbol}`
+                              : m.loan_asset.symbol}
                           </span>
-                        </td>
-                        <td className="px-4 py-3 text-right text-emerald-400 font-medium tabular-nums whitespace-nowrap">
-                          {formatApy(pool.apy)}
-                        </td>
-                        <td className="px-4 py-3 text-right text-[var(--text-secondary)] tabular-nums whitespace-nowrap">
-                          {formatUsd(pool.tvlUsd)}
-                        </td>
-                        <td className="px-4 py-3 text-right text-[var(--text-secondary)] tabular-nums whitespace-nowrap">
-                          {formatApy(pool.apyBase)}
-                        </td>
-                        <td
-                          className={`px-4 py-3 text-right tabular-nums whitespace-nowrap ${getApyChangeColor(pool.apyPct7D)}`}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className="text-[var(--text-secondary)] text-xs mr-1.5">
+                          {getProtocolLabel(m.protocol)}
+                        </span>
+                        <span
+                          className={`text-xs px-2 py-0.5 rounded border ${getChainColor(m.chain_name)}`}
                         >
-                          {pool.apyPct7D != null
-                            ? `${pool.apyPct7D > 0 ? "+" : ""}${pool.apyPct7D.toFixed(2)}%`
-                            : "-"}
-                        </td>
-                        <td className="px-4 py-3 text-[var(--text-muted)] whitespace-nowrap">
-                          {pool.exposure === "single" ? "单一" : "多重"}
-                        </td>
-                      </tr>
-                      {expandedPool === pool.pool && (
-                        <PoolDetail key={`detail-${pool.pool}`} pool={pool} />
-                      )}
-                    </>
+                          {getChainLabel(m.chain_name)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right text-emerald-400 font-medium tabular-nums whitespace-nowrap">
+                        {formatApy(m.supply_apy)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-red-400 tabular-nums whitespace-nowrap">
+                        {m.borrow_apy > 0 ? (
+                          formatApy(m.borrow_apy)
+                        ) : (
+                          <span className="text-[var(--text-muted)]">-</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right text-[var(--text-secondary)] tabular-nums whitespace-nowrap">
+                        {formatUsd(m.total_supply_usd)}
+                      </td>
+                      <td className="px-4 py-3 text-right text-[var(--text-secondary)] tabular-nums whitespace-nowrap">
+                        {formatUsd(m.liquidity_usd)}
+                      </td>
+                      <td className="px-4 py-3 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-2">
+                          <span
+                            className={`tabular-nums ${
+                              m.utilization > 0.9
+                                ? "text-red-400"
+                                : m.utilization > 0.7
+                                  ? "text-amber-400"
+                                  : "text-[var(--text-secondary)]"
+                            }`}
+                          >
+                            {formatPercent(m.utilization)}
+                          </span>
+                          <div className="w-12 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${
+                                m.utilization > 0.9
+                                  ? "bg-red-400"
+                                  : m.utilization > 0.7
+                                    ? "bg-amber-400"
+                                    : "bg-[var(--accent-primary)]"
+                              }`}
+                              style={{ width: `${Math.min(100, m.utilization * 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
                   ))
                 )}
               </tbody>

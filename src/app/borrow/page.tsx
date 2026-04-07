@@ -107,7 +107,7 @@ function SortHeader({
   );
 }
 
-export default function LeveragePage() {
+export default function BorrowPage() {
   const { markets, loading, error, uniqueChains, uniqueProtocols } =
     useYieldzMarkets("leverage");
   const { feeInfo } = useYieldzFeeInfo();
@@ -231,7 +231,7 @@ export default function LeveragePage() {
     <AppSidebar>
       <div className="max-w-full mx-auto">
         <h1 className="text-2xl md:text-3xl font-bold text-[var(--text-primary)] mb-2">
-          杠杆策略
+          借贷市场
         </h1>
         <p className="text-sm text-[var(--text-secondary)] mb-6">
           Aave V3 与 Morpho 借贷市场的杠杆循环策略分析 — 有效杠杆 APY =

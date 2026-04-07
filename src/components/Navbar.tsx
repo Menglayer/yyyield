@@ -21,7 +21,7 @@ export default function Navbar() {
     { name: "首页", href: "/" },
     { name: "市场", href: "/markets/" },
     { name: "存款", href: "/deposit/" },
-    { name: "杠杆", href: "/leverage/" },
+    { name: "借贷", href: "/borrow/" },
     { name: "看板", href: "/dashboard/" },
   ];
 

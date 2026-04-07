@@ -143,3 +143,7 @@ export const HIGHLIGHTED_CHAINS = [
   "Katana",
   "World Chain",
 ];
+
+export function getTokenIconUrl(chainId: number, address: string, symbol: string): string {
+  return `https://assets.smold.app/api/token/${chainId}/${address}/logo.svg`;
+}

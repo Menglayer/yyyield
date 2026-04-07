@@ -7,7 +7,7 @@ import {
   BarChart3,
   LayoutList,
   Landmark,
-  Zap,
+  ArrowLeftRight,
   Menu,
   X,
   Send,
@@ -17,7 +17,7 @@ const NAV_ITEMS = [
   { label: "数据看板", href: "/dashboard/", icon: BarChart3 },
   { label: "全部市场", href: "/markets/", icon: LayoutList },
   { label: "存款策略", href: "/deposit/", icon: Landmark },
-  { label: "杠杆策略", href: "/leverage/", icon: Zap },
+  { label: "借贷市场", href: "/borrow/", icon: ArrowLeftRight },
 ];
 
 const XIcon = ({ className }: { className?: string }) => (
