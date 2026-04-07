@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Send } from "lucide-react";
 
 const XIcon = ({ className }: { className?: string }) => (
@@ -25,7 +26,7 @@ export function Footer() {
               <span className="gradient-text">YYY</span>ield
             </div>
             <p className="text-[var(--text-secondary)] text-lg max-w-xs">
-              多层真实收益 DeFi 生态系统
+              实时 DeFi 收益数据聚合平台
             </p>
           </div>
 
@@ -35,43 +36,60 @@ export function Footer() {
               <h4 className="text-white font-bold mb-6 text-lg">产品</h4>
               <ul className="space-y-4">
                 <li>
-                  <a href="#staking" className="text-[var(--text-secondary)] hover:text-[var(--accent-start)] transition-colors">
-                    质押
-                  </a>
+                  <Link
+                    href="/markets/"
+                    className="text-[var(--text-secondary)] hover:text-[var(--accent-start)] transition-colors"
+                  >
+                    全部市场
+                  </Link>
                 </li>
                 <li>
-                  <a href="#bonds" className="text-[var(--text-secondary)] hover:text-[var(--accent-start)] transition-colors">
-                    债券
-                  </a>
+                  <Link
+                    href="/deposit/"
+                    className="text-[var(--text-secondary)] hover:text-[var(--accent-start)] transition-colors"
+                  >
+                    存款策略
+                  </Link>
                 </li>
                 <li>
-                  <a href="#accelerator" className="text-[var(--text-secondary)] hover:text-[var(--accent-start)] transition-colors">
-                    加速器
-                  </a>
+                  <Link
+                    href="/leverage/"
+                    className="text-[var(--text-secondary)] hover:text-[var(--accent-start)] transition-colors"
+                  >
+                    杠杆策略
+                  </Link>
                 </li>
                 <li>
-                  <a href="#strategies" className="text-[var(--text-secondary)] hover:text-[var(--accent-start)] transition-colors">
-                    策略
-                  </a>
+                  <Link
+                    href="/dashboard/"
+                    className="text-[var(--text-secondary)] hover:text-[var(--accent-start)] transition-colors"
+                  >
+                    数据看板
+                  </Link>
                 </li>
               </ul>
             </div>
             <div>
-              <h4 className="text-white font-bold mb-6 text-lg">资源</h4>
+              <h4 className="text-white font-bold mb-6 text-lg">数据来源</h4>
               <ul className="space-y-4">
                 <li>
-                  <a href="#docs" className="text-[var(--text-secondary)] hover:text-[var(--accent-start)] transition-colors">
-                    文档
+                  <a
+                    href="https://defillama.com/yields"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[var(--text-secondary)] hover:text-[var(--accent-start)] transition-colors"
+                  >
+                    DefiLlama
                   </a>
                 </li>
                 <li>
-                  <a href="#audit" className="text-[var(--text-secondary)] hover:text-[var(--accent-start)] transition-colors">
-                    审计报告
-                  </a>
-                </li>
-                <li>
-                  <a href="#community" className="text-[var(--text-secondary)] hover:text-[var(--accent-start)] transition-colors">
-                    社区
+                  <a
+                    href="https://morpho.org"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[var(--text-secondary)] hover:text-[var(--accent-start)] transition-colors"
+                  >
+                    Morpho Blue
                   </a>
                 </li>
               </ul>
@@ -80,7 +98,7 @@ export function Footer() {
 
           {/* Column 3: Socials */}
           <div className="md:justify-self-end">
-            <h4 className="text-white font-bold mb-6 text-lg">加入我们</h4>
+            <h4 className="text-white font-bold mb-6 text-lg">关注我们</h4>
             <div className="flex gap-4">
               <a
                 href="https://x.com/menglayer"

@@ -1,39 +1,33 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Shield, TrendingUp, Users, Umbrella, Lock, Gift } from "lucide-react";
+import { Activity, Globe, TrendingUp, ShieldCheck } from "lucide-react";
 
 export function Features() {
   const features = [
     {
-      title: "债券机制",
-      description: "锁定稳定币，逐步获取 YZ 代币，实现风险可控的稳定收益",
-      icon: Lock,
+      title: "实时收益数据",
+      description:
+        "聚合 DefiLlama 全量收益池数据，实时更新 APY、TVL 等核心指标，无需逐个协议查看",
+      icon: Activity,
     },
     {
-      title: "APY 加速器",
-      description: "通过牺牲部分代币获取更高收益倍率，激励长期参与",
+      title: "多链覆盖",
+      description:
+        "支持以太坊、Arbitrum、Base、Optimism、Polygon、Solana 等主流公链，一站式掌握全链收益机会",
+      icon: Globe,
+    },
+    {
+      title: "杠杆策略分析",
+      description:
+        "自动计算借贷循环的有效杠杆收益率，展示供应 APY、借款 APY、LTV 与最大杠杆倍数",
       icon: TrendingUp,
     },
     {
-      title: "DAO 治理",
-      description: "代币持有者共同决策，社区驱动协议发展方向",
-      icon: Users,
-    },
-    {
-      title: "收益保险基金",
-      description: "专项储备金稳定收益分发，保障用户利益",
-      icon: Shield,
-    },
-    {
-      title: "价格底池",
-      description: "内置价格支撑机制，防止代币价格剧烈波动",
-      icon: Umbrella,
-    },
-    {
-      title: "多重奖励",
-      description: "bYZ 持有者享受协议手续费分成与月度额外奖励",
-      icon: Gift,
+      title: "风险评估",
+      description:
+        "基于利用率、LTV、波动率等指标进行风险评级，帮助您在收益与安全之间做出明智选择",
+      icon: ShieldCheck,
     },
   ];
 
@@ -47,7 +41,11 @@ export function Features() {
 
   const itemVariants = {
     hidden: { opacity: 0, y: 20 },
-    show: { opacity: 1, y: 0, transition: { duration: 0.5 } },
+    show: {
+      opacity: 1,
+      y: 0,
+      transition: { duration: 0.5, ease: "easeOut" as const },
+    },
   };
 
   return (
@@ -55,10 +53,10 @@ export function Features() {
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center max-w-3xl mx-auto mb-16">
           <h2 className="text-3xl md:text-5xl font-bold mb-6 gradient-text">
-            核心特性
+            核心功能
           </h2>
           <p className="text-[var(--text-secondary)] text-lg md:text-xl">
-            多层架构设计，解决 DeFi 核心痛点
+            为 DeFi 投资者打造的专业收益数据平台
           </p>
         </div>
 
@@ -67,7 +65,7 @@ export function Features() {
           initial="hidden"
           whileInView="show"
           viewport={{ once: true, margin: "-100px" }}
-          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8"
+          className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8"
         >
           {features.map((feature) => {
             const Icon = feature.icon;

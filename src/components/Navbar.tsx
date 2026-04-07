@@ -19,9 +19,10 @@ export default function Navbar() {
 
   const navLinks = [
     { name: "首页", href: "/" },
-    { name: "策略", href: "/strategies/" },
-    { name: "特性", href: "/#features" },
-    { name: "路线图", href: "/#roadmap" },
+    { name: "市场", href: "/markets/" },
+    { name: "存款", href: "/deposit/" },
+    { name: "杠杆", href: "/leverage/" },
+    { name: "看板", href: "/dashboard/" },
   ];
 
   return (
