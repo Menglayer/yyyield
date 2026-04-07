@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useMemo, useCallback } from "react";
 import AppSidebar from "@/components/AppSidebar";
-import { useYieldPools } from "@/lib/hooks";
-import type { PoolFilters, SortConfig, SortField } from "@/lib/types";
+import { useYieldzMarkets, useYieldzFeeInfo } from "@/lib/hooks";
+import type { YieldzMarket } from "@/lib/types";
 import {
   formatUsd,
   formatApy,
+  formatPercent,
   getChainColor,
   getChainLabel,
   getProtocolLabel,
@@ -19,7 +20,19 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsUpDown,
+  Info,
 } from "lucide-react";
+
+type DepositSortField =
+  | "supply_apy"
+  | "total_supply_usd"
+  | "liquidity_usd"
+  | "utilization";
+
+interface DepositSortConfig {
+  field: DepositSortField;
+  direction: "asc" | "desc";
+}
 
 function SortHeader({
   label,
@@ -28,9 +41,9 @@ function SortHeader({
   onSort,
 }: {
   label: string;
-  field: SortField;
-  sort: SortConfig;
-  onSort: (field: SortField) => void;
+  field: DepositSortField;
+  sort: DepositSortConfig;
+  onSort: (field: DepositSortField) => void;
 }) {
   const active = sort.field === field;
   return (
@@ -57,20 +70,67 @@ function SortHeader({
 }
 
 export default function DepositPage() {
-  const [filters, setFilters] = useState<PoolFilters>({
-    exposure: "single",
-  });
-  const [sort, setSort] = useState<SortConfig>({
-    field: "apy",
+  const { markets, loading, error, uniqueChains, uniqueProtocols } =
+    useYieldzMarkets("deposit");
+  const { feeInfo } = useYieldzFeeInfo();
+
+  const [search, setSearch] = useState("");
+  const [selectedChains, setSelectedChains] = useState<string[]>([]);
+  const [selectedProtocol, setSelectedProtocol] = useState<string | null>(null);
+  const [sort, setSort] = useState<DepositSortConfig>({
+    field: "supply_apy",
     direction: "desc",
   });
   const [page, setPage] = useState(1);
   const [chainOpen, setChainOpen] = useState(false);
+  const pageSize = 50;
 
-  const { pools, totalFiltered, totalPages, loading, error, uniqueChains } =
-    useYieldPools(filters, sort, page, 50);
+  // Filter
+  const filtered = useMemo(() => {
+    let result = markets;
 
-  const handleSort = useCallback((field: SortField) => {
+    if (selectedChains.length > 0) {
+      const chains = new Set(selectedChains);
+      result = result.filter((m) => chains.has(m.chain_name));
+    }
+
+    if (selectedProtocol) {
+      result = result.filter((m) => m.protocol === selectedProtocol);
+    }
+
+    if (search) {
+      const q = search.toLowerCase();
+      result = result.filter(
+        (m) =>
+          m.loan_asset.symbol.toLowerCase().includes(q) ||
+          m.chain_name.toLowerCase().includes(q) ||
+          m.protocol.toLowerCase().includes(q),
+      );
+    }
+
+    return result;
+  }, [markets, selectedChains, selectedProtocol, search]);
+
+  // Sort
+  const sorted = useMemo(() => {
+    const arr = [...filtered];
+    const dir = sort.direction === "asc" ? 1 : -1;
+    arr.sort((a, b) => {
+      const va = a[sort.field] ?? 0;
+      const vb = b[sort.field] ?? 0;
+      return (va - vb) * dir;
+    });
+    return arr;
+  }, [filtered, sort]);
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+  const paginated = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return sorted.slice(start, start + pageSize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sorted, page]);
+
+  const handleSort = useCallback((field: DepositSortField) => {
     setSort((prev) => ({
       field,
       direction:
@@ -79,21 +139,12 @@ export default function DepositPage() {
     setPage(1);
   }, []);
 
-  const handleSearch = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      setFilters((prev) => ({ ...prev, search: e.target.value || undefined }));
-      setPage(1);
-    },
-    [],
-  );
-
   const toggleChain = useCallback((chain: string) => {
-    setFilters((prev) => {
-      const current = prev.chains ?? [];
-      const next = current.includes(chain)
-        ? current.filter((c) => c !== chain)
-        : [...current, chain];
-      return { ...prev, chains: next.length > 0 ? next : undefined };
+    setSelectedChains((prev) => {
+      const next = prev.includes(chain)
+        ? prev.filter((c) => c !== chain)
+        : [...prev, chain];
+      return next;
     });
     setPage(1);
   }, []);
@@ -105,7 +156,10 @@ export default function DepositPage() {
     (c) => !HIGHLIGHTED_CHAINS.includes(c),
   );
 
-  const skeletonKeys = ["ds-1", "ds-2", "ds-3", "ds-4", "ds-5", "ds-6", "ds-7", "ds-8", "ds-9", "ds-10"];
+  const skeletonKeys = [
+    "ds-1", "ds-2", "ds-3", "ds-4", "ds-5",
+    "ds-6", "ds-7", "ds-8", "ds-9", "ds-10",
+  ];
 
   return (
     <AppSidebar>
@@ -114,12 +168,19 @@ export default function DepositPage() {
           存款策略
         </h1>
         <p className="text-sm text-[var(--text-secondary)] mb-6">
-          筛选单一敞口的存款收益池，关注 APY、TVL 与稳定币状态
+          浏览 Aave V3 与 Morpho 的纯存款市场，比较供应 APY 与流动性
         </p>
 
         {error && (
           <div className="mb-4 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
             {error}
+          </div>
+        )}
+
+        {feeInfo && (
+          <div className="mb-4 p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-default)] flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+            <Info size={14} className="text-[var(--accent-primary)] shrink-0" />
+            <span>{feeInfo.description}</span>
           </div>
         )}
 
@@ -132,8 +193,12 @@ export default function DepositPage() {
             />
             <input
               type="text"
-              placeholder="搜索代币..."
-              onChange={handleSearch}
+              placeholder="搜索资产..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
               className="w-full pl-9 pr-4 py-2.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border-default)] text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)]"
             />
           </div>
@@ -146,9 +211,9 @@ export default function DepositPage() {
               className="px-4 py-2.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border-default)] text-sm text-[var(--text-secondary)] flex items-center gap-2 hover:border-[var(--border-hover)] transition-colors"
             >
               链
-              {filters.chains && filters.chains.length > 0 && (
+              {selectedChains.length > 0 && (
                 <span className="text-xs bg-[var(--accent-primary)]/20 text-[var(--accent-primary)] px-1.5 rounded">
-                  {filters.chains.length}
+                  {selectedChains.length}
                 </span>
               )}
               <ChevronDown size={14} />
@@ -161,7 +226,7 @@ export default function DepositPage() {
                     key={chain}
                     onClick={() => toggleChain(chain)}
                     className={`w-full text-left px-3 py-1.5 rounded text-sm transition-colors ${
-                      filters.chains?.includes(chain)
+                      selectedChains.includes(chain)
                         ? "bg-[var(--accent-primary)]/10 text-[var(--accent-primary)]"
                         : "text-[var(--text-secondary)] hover:bg-white/5"
                     }`}
@@ -178,7 +243,7 @@ export default function DepositPage() {
                         key={chain}
                         onClick={() => toggleChain(chain)}
                         className={`w-full text-left px-3 py-1.5 rounded text-sm transition-colors ${
-                          filters.chains?.includes(chain)
+                          selectedChains.includes(chain)
                             ? "bg-[var(--accent-primary)]/10 text-[var(--accent-primary)]"
                             : "text-[var(--text-secondary)] hover:bg-white/5"
                         }`}
@@ -192,50 +257,44 @@ export default function DepositPage() {
             )}
           </div>
 
-          {/* Stablecoin toggle */}
-          <button
-            type="button"
-            onClick={() =>
-              setFilters((prev) => ({
-                ...prev,
-                stablecoinOnly: !prev.stablecoinOnly,
-              }))
-            }
-            className={`px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
-              filters.stablecoinOnly
-                ? "bg-[var(--accent-primary)]/10 border-[var(--accent-primary)]/30 text-[var(--accent-primary)]"
-                : "bg-[var(--bg-card)] border-[var(--border-default)] text-[var(--text-secondary)]"
-            }`}
-          >
-            仅稳定币
-          </button>
-
-          {/* Exposure toggle */}
+          {/* Protocol filter */}
           <div className="flex items-center gap-1 bg-[var(--bg-card)] border border-[var(--border-default)] rounded-lg p-1">
-            {([
-              { label: "单一敞口", value: "single" as const },
-              { label: "全部", value: null },
-            ]).map((opt) => (
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedProtocol(null);
+                setPage(1);
+              }}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                selectedProtocol === null
+                  ? "bg-[var(--accent-primary)]/10 text-[var(--accent-primary)]"
+                  : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              }`}
+            >
+              全部
+            </button>
+            {uniqueProtocols.map((p) => (
               <button
                 type="button"
-                key={opt.label}
-                onClick={() =>
-                  setFilters((prev) => ({ ...prev, exposure: opt.value }))
-                }
+                key={p}
+                onClick={() => {
+                  setSelectedProtocol(p);
+                  setPage(1);
+                }}
                 className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                  filters.exposure === opt.value
+                  selectedProtocol === p
                     ? "bg-[var(--accent-primary)]/10 text-[var(--accent-primary)]"
                     : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                 }`}
               >
-                {opt.label}
+                {getProtocolLabel(p)}
               </button>
             ))}
           </div>
         </div>
 
         <div className="text-xs text-[var(--text-muted)] mb-3">
-          共 {loading ? "..." : totalFiltered.toLocaleString()} 个池
+          共 {loading ? "..." : sorted.length.toLocaleString()} 个市场
         </div>
 
         {/* Table */}
@@ -253,12 +312,30 @@ export default function DepositPage() {
                   <th className="text-left px-4 py-3 font-medium text-xs text-[var(--text-muted)]">
                     链
                   </th>
-                  <SortHeader label="APY" field="apy" sort={sort} onSort={handleSort} />
-                  <SortHeader label="TVL" field="tvlUsd" sort={sort} onSort={handleSort} />
-                  <SortHeader label="基础 APY" field="apyBase" sort={sort} onSort={handleSort} />
-                  <th className="text-left px-4 py-3 font-medium text-xs text-[var(--text-muted)]">
-                    稳定币
-                  </th>
+                  <SortHeader
+                    label="供应 APY"
+                    field="supply_apy"
+                    sort={sort}
+                    onSort={handleSort}
+                  />
+                  <SortHeader
+                    label="TVL"
+                    field="total_supply_usd"
+                    sort={sort}
+                    onSort={handleSort}
+                  />
+                  <SortHeader
+                    label="流动性"
+                    field="liquidity_usd"
+                    sort={sort}
+                    onSort={handleSort}
+                  />
+                  <SortHeader
+                    label="利用率"
+                    field="utilization"
+                    sort={sort}
+                    onSort={handleSort}
+                  />
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border-default)]">
@@ -270,50 +347,56 @@ export default function DepositPage() {
                       <td className="px-4 py-3"><div className="h-4 w-14 bg-white/5 rounded animate-pulse" /></td>
                       <td className="px-4 py-3"><div className="h-4 w-14 bg-white/5 rounded animate-pulse" /></td>
                       <td className="px-4 py-3"><div className="h-4 w-16 bg-white/5 rounded animate-pulse" /></td>
-                      <td className="px-4 py-3"><div className="h-4 w-14 bg-white/5 rounded animate-pulse" /></td>
-                      <td className="px-4 py-3"><div className="h-4 w-8 bg-white/5 rounded animate-pulse" /></td>
+                      <td className="px-4 py-3"><div className="h-4 w-16 bg-white/5 rounded animate-pulse" /></td>
+                      <td className="px-4 py-3"><div className="h-4 w-12 bg-white/5 rounded animate-pulse" /></td>
                     </tr>
                   ))
-                ) : pools.length === 0 ? (
+                ) : paginated.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-4 py-12 text-center text-[var(--text-muted)]">
                       无匹配结果
                     </td>
                   </tr>
                 ) : (
-                  pools.map((pool) => (
+                  paginated.map((m) => (
                     <tr
-                      key={pool.pool}
+                      key={`${m.protocol}-${m.id}-${m.chain_id}`}
                       className="hover:bg-white/[0.02] transition-colors"
                     >
                       <td className="px-4 py-3 font-medium text-[var(--text-primary)] whitespace-nowrap">
-                        {pool.symbol}
+                        {m.loan_asset.symbol}
                       </td>
                       <td className="px-4 py-3 text-[var(--text-secondary)] whitespace-nowrap">
-                        {getProtocolLabel(pool.project)}
+                        {getProtocolLabel(m.protocol)}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <span className={`text-xs px-2 py-0.5 rounded border ${getChainColor(pool.chain)}`}>
-                          {getChainLabel(pool.chain)}
+                        <span
+                          className={`text-xs px-2 py-0.5 rounded border ${getChainColor(m.chain_name)}`}
+                        >
+                          {getChainLabel(m.chain_name)}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right text-emerald-400 font-medium tabular-nums whitespace-nowrap">
-                        {formatApy(pool.apy)}
+                        {formatApy(m.supply_apy)}
                       </td>
                       <td className="px-4 py-3 text-right text-[var(--text-secondary)] tabular-nums whitespace-nowrap">
-                        {formatUsd(pool.tvlUsd)}
+                        {formatUsd(m.total_supply_usd)}
                       </td>
                       <td className="px-4 py-3 text-right text-[var(--text-secondary)] tabular-nums whitespace-nowrap">
-                        {formatApy(pool.apyBase)}
+                        {formatUsd(m.liquidity_usd)}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {pool.stablecoin ? (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                            是
-                          </span>
-                        ) : (
-                          <span className="text-[var(--text-muted)]">-</span>
-                        )}
+                      <td className="px-4 py-3 text-right tabular-nums whitespace-nowrap">
+                        <span
+                          className={
+                            m.utilization > 0.9
+                              ? "text-red-400"
+                              : m.utilization > 0.7
+                                ? "text-amber-400"
+                                : "text-[var(--text-secondary)]"
+                          }
+                        >
+                          {formatPercent(m.utilization)}
+                        </span>
                       </td>
                     </tr>
                   ))

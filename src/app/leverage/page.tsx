@@ -1,15 +1,22 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import AppSidebar from "@/components/AppSidebar";
-import { useMorphoMarkets } from "@/lib/hooks";
-import type { MorphoMarket } from "@/lib/types";
+import { useYieldzMarkets, useYieldzFeeInfo } from "@/lib/hooks";
 import {
   formatUsd,
   formatApy,
   formatPercent,
+  getChainColor,
+  getChainLabel,
+  getProtocolLabel,
   getRiskColor,
+  lltvBpsToRatio,
+  computeEffectiveLeverageApy,
+  computeMaxLeverage,
+  HIGHLIGHTED_CHAINS,
 } from "@/lib/utils";
+import type { RiskLevel } from "@/lib/types";
 import {
   Search,
   ChevronDown,
@@ -18,6 +25,7 @@ import {
   ChevronRight,
   ChevronsUpDown,
   AlertTriangle,
+  Info,
 } from "lucide-react";
 
 type LeverageSortField =
@@ -33,18 +41,34 @@ interface LeverageSortConfig {
   direction: "asc" | "desc";
 }
 
-function computeEffectiveApy(
-  supplyApy: number,
-  borrowApy: number,
-  lltv: number,
-): number {
-  if (lltv >= 1 || lltv <= 0) return supplyApy;
-  return (supplyApy - borrowApy * lltv) / (1 - lltv);
+/** Derive a risk grade from utilization + LTV */
+function deriveRiskLevel(utilization: number, lltv: number): RiskLevel {
+  if (lltv <= 0.5 && utilization <= 0.5) return "A+";
+  if (lltv <= 0.65 && utilization <= 0.6) return "A";
+  if (lltv <= 0.75 && utilization <= 0.7) return "B+";
+  if (lltv <= 0.8 && utilization <= 0.8) return "B";
+  if (lltv <= 0.85 && utilization <= 0.85) return "C+";
+  if (lltv <= 0.9 && utilization <= 0.9) return "C";
+  if (lltv > 0.9 || utilization > 0.9) return "D";
+  return "unknown";
 }
 
-function computeMaxLeverage(lltv: number): number {
-  if (lltv >= 1 || lltv <= 0) return 1;
-  return 1 / (1 - lltv);
+interface AugmentedMarket {
+  id: string;
+  protocol: string;
+  chainName: string;
+  chainId: number;
+  loanSymbol: string;
+  collateralSymbol: string;
+  supplyApy: number;
+  borrowApy: number;
+  effectiveApy: number;
+  maxLeverage: number;
+  lltv: number; // ratio 0-1
+  utilization: number;
+  totalSupplyUsd: number;
+  liquidityUsd: number;
+  riskLevel: RiskLevel;
 }
 
 function SortHeader({
@@ -82,45 +106,75 @@ function SortHeader({
   );
 }
 
-// Augmented market with computed fields
-interface AugmentedMarket extends MorphoMarket {
-  effectiveApy: number;
-  maxLeverage: number;
-  liquidationBuffer: number;
-}
-
 export default function LeveragePage() {
-  const { markets, loading, error } = useMorphoMarkets();
+  const { markets, loading, error, uniqueChains, uniqueProtocols } =
+    useYieldzMarkets("leverage");
+  const { feeInfo } = useYieldzFeeInfo();
+
   const [search, setSearch] = useState("");
+  const [selectedChains, setSelectedChains] = useState<string[]>([]);
+  const [selectedProtocol, setSelectedProtocol] = useState<string | null>(null);
   const [sort, setSort] = useState<LeverageSortConfig>({
     field: "effectiveApy",
     direction: "desc",
   });
   const [page, setPage] = useState(1);
+  const [chainOpen, setChainOpen] = useState(false);
   const pageSize = 50;
 
   // Augment with computed fields
   const augmented: AugmentedMarket[] = useMemo(() => {
-    return markets
-      .filter((m) => m.collateralAsset !== null && m.lltv > 0)
-      .map((m) => ({
-        ...m,
-        effectiveApy: computeEffectiveApy(m.supplyApy, m.borrowApy, m.lltv),
-        maxLeverage: computeMaxLeverage(m.lltv),
-        liquidationBuffer: 1 - m.utilization,
-      }));
+    return markets.map((m) => {
+      const ltvRatio = lltvBpsToRatio(m.lltv);
+      return {
+        id: `${m.protocol}-${m.id}-${m.chain_id}`,
+        protocol: m.protocol,
+        chainName: m.chain_name,
+        chainId: m.chain_id,
+        loanSymbol: m.loan_asset.symbol,
+        collateralSymbol: m.collateral_asset?.symbol ?? "",
+        supplyApy: m.supply_apy,
+        borrowApy: m.borrow_apy,
+        effectiveApy: computeEffectiveLeverageApy(
+          m.supply_apy,
+          m.borrow_apy,
+          ltvRatio,
+        ),
+        maxLeverage: computeMaxLeverage(ltvRatio),
+        lltv: ltvRatio,
+        utilization: m.utilization,
+        totalSupplyUsd: m.total_supply_usd,
+        liquidityUsd: m.liquidity_usd,
+        riskLevel: deriveRiskLevel(m.utilization, ltvRatio),
+      };
+    });
   }, [markets]);
 
-  // Filter by search
+  // Filter
   const filtered = useMemo(() => {
-    if (!search) return augmented;
-    const q = search.toLowerCase();
-    return augmented.filter(
-      (m) =>
-        m.loanAsset.symbol.toLowerCase().includes(q) ||
-        (m.collateralAsset?.symbol.toLowerCase().includes(q) ?? false),
-    );
-  }, [augmented, search]);
+    let result = augmented;
+
+    if (selectedChains.length > 0) {
+      const chains = new Set(selectedChains);
+      result = result.filter((m) => chains.has(m.chainName));
+    }
+
+    if (selectedProtocol) {
+      result = result.filter((m) => m.protocol === selectedProtocol);
+    }
+
+    if (search) {
+      const q = search.toLowerCase();
+      result = result.filter(
+        (m) =>
+          m.loanSymbol.toLowerCase().includes(q) ||
+          m.collateralSymbol.toLowerCase().includes(q) ||
+          m.chainName.toLowerCase().includes(q),
+      );
+    }
+
+    return result;
+  }, [augmented, selectedChains, selectedProtocol, search]);
 
   // Sort
   const sorted = useMemo(() => {
@@ -129,7 +183,7 @@ export default function LeveragePage() {
     arr.sort((a, b) => {
       const va = a[sort.field] ?? 0;
       const vb = b[sort.field] ?? 0;
-      return ((va as number) - (vb as number)) * dir;
+      return (va - vb) * dir;
     });
     return arr;
   }, [filtered, sort]);
@@ -141,16 +195,36 @@ export default function LeveragePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sorted, page]);
 
-  const handleSort = (field: LeverageSortField) => {
+  const handleSort = useCallback((field: LeverageSortField) => {
     setSort((prev) => ({
       field,
       direction:
         prev.field === field && prev.direction === "desc" ? "asc" : "desc",
     }));
     setPage(1);
-  };
+  }, []);
 
-  const skeletonKeys = ["ls-1", "ls-2", "ls-3", "ls-4", "ls-5", "ls-6", "ls-7", "ls-8"];
+  const toggleChain = useCallback((chain: string) => {
+    setSelectedChains((prev) => {
+      const next = prev.includes(chain)
+        ? prev.filter((c) => c !== chain)
+        : [...prev, chain];
+      return next;
+    });
+    setPage(1);
+  }, []);
+
+  const sortedChains = HIGHLIGHTED_CHAINS.filter((c) =>
+    uniqueChains.includes(c),
+  );
+  const otherChains = uniqueChains.filter(
+    (c) => !HIGHLIGHTED_CHAINS.includes(c),
+  );
+
+  const skeletonKeys = [
+    "ls-1", "ls-2", "ls-3", "ls-4",
+    "ls-5", "ls-6", "ls-7", "ls-8",
+  ];
 
   return (
     <AppSidebar>
@@ -159,7 +233,7 @@ export default function LeveragePage() {
           杠杆策略
         </h1>
         <p className="text-sm text-[var(--text-secondary)] mb-6">
-          Morpho Blue 借贷市场的杠杆循环策略分析 — 有效杠杆 APY =
+          Aave V3 与 Morpho 借贷市场的杠杆循环策略分析 — 有效杠杆 APY =
           (供应APY - 借款APY x LTV) / (1 - LTV)
         </p>
 
@@ -169,7 +243,14 @@ export default function LeveragePage() {
           </div>
         )}
 
-        {/* Filter */}
+        {feeInfo && (
+          <div className="mb-4 p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border-default)] flex items-center gap-2 text-xs text-[var(--text-secondary)]">
+            <Info size={14} className="text-[var(--accent-primary)] shrink-0" />
+            <span>{feeInfo.description}</span>
+          </div>
+        )}
+
+        {/* Filters */}
         <div className="flex flex-col md:flex-row gap-3 mb-6">
           <div className="relative flex-1 max-w-sm">
             <Search
@@ -187,10 +268,99 @@ export default function LeveragePage() {
               className="w-full pl-9 pr-4 py-2.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border-default)] text-sm text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:border-[var(--accent-primary)]"
             />
           </div>
+
+          {/* Chain filter */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setChainOpen((v) => !v)}
+              className="px-4 py-2.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border-default)] text-sm text-[var(--text-secondary)] flex items-center gap-2 hover:border-[var(--border-hover)] transition-colors"
+            >
+              链
+              {selectedChains.length > 0 && (
+                <span className="text-xs bg-[var(--accent-primary)]/20 text-[var(--accent-primary)] px-1.5 rounded">
+                  {selectedChains.length}
+                </span>
+              )}
+              <ChevronDown size={14} />
+            </button>
+            {chainOpen && (
+              <div className="absolute top-full mt-1 left-0 z-30 w-64 max-h-72 overflow-y-auto bg-[var(--bg-elevated)] border border-[var(--border-default)] rounded-lg shadow-xl p-2">
+                {sortedChains.map((chain) => (
+                  <button
+                    type="button"
+                    key={chain}
+                    onClick={() => toggleChain(chain)}
+                    className={`w-full text-left px-3 py-1.5 rounded text-sm transition-colors ${
+                      selectedChains.includes(chain)
+                        ? "bg-[var(--accent-primary)]/10 text-[var(--accent-primary)]"
+                        : "text-[var(--text-secondary)] hover:bg-white/5"
+                    }`}
+                  >
+                    {getChainLabel(chain)}
+                  </button>
+                ))}
+                {otherChains.length > 0 && (
+                  <>
+                    <div className="border-t border-[var(--border-default)] my-1" />
+                    {otherChains.map((chain) => (
+                      <button
+                        type="button"
+                        key={chain}
+                        onClick={() => toggleChain(chain)}
+                        className={`w-full text-left px-3 py-1.5 rounded text-sm transition-colors ${
+                          selectedChains.includes(chain)
+                            ? "bg-[var(--accent-primary)]/10 text-[var(--accent-primary)]"
+                            : "text-[var(--text-secondary)] hover:bg-white/5"
+                        }`}
+                      >
+                        {getChainLabel(chain)}
+                      </button>
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Protocol filter */}
+          <div className="flex items-center gap-1 bg-[var(--bg-card)] border border-[var(--border-default)] rounded-lg p-1">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedProtocol(null);
+                setPage(1);
+              }}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                selectedProtocol === null
+                  ? "bg-[var(--accent-primary)]/10 text-[var(--accent-primary)]"
+                  : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              }`}
+            >
+              全部
+            </button>
+            {uniqueProtocols.map((p) => (
+              <button
+                type="button"
+                key={p}
+                onClick={() => {
+                  setSelectedProtocol(p);
+                  setPage(1);
+                }}
+                className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                  selectedProtocol === p
+                    ? "bg-[var(--accent-primary)]/10 text-[var(--accent-primary)]"
+                    : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                }`}
+              >
+                {getProtocolLabel(p)}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="text-xs text-[var(--text-muted)] mb-3">
-          共 {loading ? "..." : sorted.length} 个市场
+          共 {loading ? "..." : sorted.length.toLocaleString()} 个市场
         </div>
 
         {/* Table */}
@@ -204,6 +374,9 @@ export default function LeveragePage() {
                   </th>
                   <th className="text-left px-4 py-3 font-medium text-xs text-[var(--text-muted)]">
                     抵押资产
+                  </th>
+                  <th className="text-left px-4 py-3 font-medium text-xs text-[var(--text-muted)]">
+                    协议 / 链
                   </th>
                   <SortHeader
                     label="供应 APY"
@@ -252,6 +425,7 @@ export default function LeveragePage() {
                     <tr key={k}>
                       <td className="px-4 py-3"><div className="h-4 w-16 bg-white/5 rounded animate-pulse" /></td>
                       <td className="px-4 py-3"><div className="h-4 w-16 bg-white/5 rounded animate-pulse" /></td>
+                      <td className="px-4 py-3"><div className="h-4 w-20 bg-white/5 rounded animate-pulse" /></td>
                       <td className="px-4 py-3"><div className="h-4 w-14 bg-white/5 rounded animate-pulse" /></td>
                       <td className="px-4 py-3"><div className="h-4 w-14 bg-white/5 rounded animate-pulse" /></td>
                       <td className="px-4 py-3"><div className="h-4 w-16 bg-white/5 rounded animate-pulse" /></td>
@@ -264,7 +438,7 @@ export default function LeveragePage() {
                 ) : paginated.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={9}
+                      colSpan={10}
                       className="px-4 py-12 text-center text-[var(--text-muted)]"
                     >
                       无匹配结果
@@ -277,10 +451,20 @@ export default function LeveragePage() {
                       className="hover:bg-white/[0.02] transition-colors"
                     >
                       <td className="px-4 py-3 font-medium text-[var(--text-primary)] whitespace-nowrap">
-                        {m.loanAsset.symbol}
+                        {m.loanSymbol}
                       </td>
                       <td className="px-4 py-3 text-[var(--text-secondary)] whitespace-nowrap">
-                        {m.collateralAsset?.symbol ?? "-"}
+                        {m.collateralSymbol || "-"}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className="text-[var(--text-secondary)] text-xs mr-1.5">
+                          {getProtocolLabel(m.protocol)}
+                        </span>
+                        <span
+                          className={`text-xs px-2 py-0.5 rounded border ${getChainColor(m.chainName)}`}
+                        >
+                          {getChainLabel(m.chainName)}
+                        </span>
                       </td>
                       <td className="px-4 py-3 text-right text-emerald-400 tabular-nums whitespace-nowrap">
                         {formatApy(m.supplyApy)}

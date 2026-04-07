@@ -1,10 +1,17 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { fetchDefiLlamaPools, fetchMorphoMarkets } from "./api";
+import {
+  fetchDefiLlamaPools,
+  fetchMorphoMarkets,
+  fetchYieldzMarkets,
+  fetchYieldzFeeInfo,
+} from "./api";
 import type {
   YieldPool,
   MorphoMarket,
+  YieldzMarket,
+  YieldzFeeInfo,
   PoolFilters,
   DashboardStats,
   SortConfig,
@@ -285,4 +292,109 @@ export function useDashboardStats() {
   }, [compute]);
 
   return { stats, loading, error };
+}
+
+// ===== Yieldz Markets =====
+
+let yieldzCache: YieldzMarket[] | null = null;
+let yieldzCacheTime = 0;
+
+async function getCachedYieldzMarkets(): Promise<YieldzMarket[]> {
+  const now = Date.now();
+  if (yieldzCache && now - yieldzCacheTime < CACHE_TTL) {
+    return yieldzCache;
+  }
+  const data = await fetchYieldzMarkets();
+  yieldzCache = data;
+  yieldzCacheTime = now;
+  return data;
+}
+
+export function useYieldzMarkets(mode: "deposit" | "leverage" | "all" = "all") {
+  const [allMarkets, setAllMarkets] = useState<YieldzMarket[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    getCachedYieldzMarkets()
+      .then((data) => {
+        if (!cancelled) {
+          setAllMarkets(data);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(
+            err instanceof Error ? err.message : "获取 Yieldz 市场数据失败",
+          );
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const markets = useMemo(() => {
+    if (mode === "deposit") {
+      return allMarkets.filter((m) => m.collateral_asset === null);
+    }
+    if (mode === "leverage") {
+      return allMarkets.filter(
+        (m) => m.collateral_asset !== null && Number(m.lltv) > 0,
+      );
+    }
+    return allMarkets;
+  }, [allMarkets, mode]);
+
+  const uniqueChains = useMemo(() => {
+    const set = new Set<string>();
+    for (const m of markets) set.add(m.chain_name);
+    return Array.from(set).sort();
+  }, [markets]);
+
+  const uniqueProtocols = useMemo(() => {
+    const set = new Set<string>();
+    for (const m of markets) set.add(m.protocol);
+    return Array.from(set).sort();
+  }, [markets]);
+
+  return { markets, allMarkets, loading, error, uniqueChains, uniqueProtocols };
+}
+
+// ===== Yieldz Fee Info =====
+
+export function useYieldzFeeInfo() {
+  const [feeInfo, setFeeInfo] = useState<YieldzFeeInfo | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+
+    fetchYieldzFeeInfo()
+      .then((data) => {
+        if (!cancelled) {
+          setFeeInfo(data);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return { feeInfo, loading };
 }

@@ -64,6 +64,55 @@ export interface MorphoMarket {
   chainId: number;
 }
 
+// ===== Yieldz API Types =====
+
+export interface YieldzAsset {
+  address: string;
+  symbol: string;
+  decimals: number;
+}
+
+export interface YieldzMarket {
+  protocol: string;
+  id: string;
+  chain_id: number;
+  chain_name: string;
+  loan_asset: YieldzAsset;
+  collateral_asset: YieldzAsset | null;
+  lltv: string; // bps string e.g. "8050" = 80.50%
+  oracle_address: string;
+  oracle_type: string;
+  oracle_providers: string[];
+  irm_address: string;
+  supply_apy: number; // already percentage, e.g. 1.74 = 1.74%
+  borrow_apy: number;
+  total_supply_usd: number;
+  total_borrow_usd: number;
+  total_supply_assets: number;
+  total_borrow_assets: number;
+  liquidity_usd: number;
+  utilization: number; // 0-1 range
+  rewards: unknown[];
+  protocol_data: Record<string, unknown> | null;
+}
+
+export interface YieldzMarketsResponse {
+  success: boolean;
+  data: YieldzMarket[];
+}
+
+export interface YieldzFeeInfo {
+  fee_recipient: string;
+  fee_amount_usd: number;
+  fee_amount_wei: string;
+  description: string;
+}
+
+export interface YieldzFeeResponse {
+  success: boolean;
+  data: YieldzFeeInfo;
+}
+
 // ===== Filter / UI Types =====
 
 export interface PoolFilters {

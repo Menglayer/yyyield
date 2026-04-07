@@ -1,4 +1,13 @@
-import type { DefiLlamaResponse, YieldPool, MorphoMarket, RiskLevel } from "./types";
+import type {
+  DefiLlamaResponse,
+  YieldPool,
+  MorphoMarket,
+  RiskLevel,
+  YieldzMarket,
+  YieldzMarketsResponse,
+  YieldzFeeInfo,
+  YieldzFeeResponse,
+} from "./types";
 
 // ===== DefiLlama Yields API =====
 
@@ -143,5 +152,60 @@ export async function fetchMorphoMarkets(): Promise<MorphoMarket[]> {
   } catch (err) {
     console.error("Failed to fetch Morpho markets:", err);
     return [];
+  }
+}
+
+// ===== Yieldz API =====
+
+const YIELDZ_MARKETS_URL = "https://yieldz.io/api/markets";
+const YIELDZ_FEE_URL = "https://yieldz.io/api/fee-info";
+
+export async function fetchYieldzMarkets(): Promise<YieldzMarket[]> {
+  try {
+    const res = await fetch(YIELDZ_MARKETS_URL, {
+      headers: { Accept: "application/json" },
+    });
+
+    if (!res.ok) {
+      console.error(`Yieldz Markets API error: ${res.status}`);
+      return [];
+    }
+
+    const json: YieldzMarketsResponse = await res.json();
+
+    if (!json.success || !Array.isArray(json.data)) {
+      console.error("Yieldz Markets API returned unexpected format");
+      return [];
+    }
+
+    return json.data;
+  } catch (err) {
+    console.error("Failed to fetch Yieldz markets:", err);
+    return [];
+  }
+}
+
+export async function fetchYieldzFeeInfo(): Promise<YieldzFeeInfo | null> {
+  try {
+    const res = await fetch(YIELDZ_FEE_URL, {
+      headers: { Accept: "application/json" },
+    });
+
+    if (!res.ok) {
+      console.error(`Yieldz Fee API error: ${res.status}`);
+      return null;
+    }
+
+    const json: YieldzFeeResponse = await res.json();
+
+    if (!json.success || !json.data) {
+      console.error("Yieldz Fee API returned unexpected format");
+      return null;
+    }
+
+    return json.data;
+  } catch (err) {
+    console.error("Failed to fetch Yieldz fee info:", err);
+    return null;
   }
 }

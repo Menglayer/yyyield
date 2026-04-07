@@ -47,6 +47,10 @@ const CHAIN_STYLES: Record<string, { color: string; label: string }> = {
   Solana: { color: "bg-violet-500/20 text-violet-400 border-violet-500/30", label: "Solana" },
   Avalanche: { color: "bg-rose-500/20 text-rose-400 border-rose-500/30", label: "Avalanche" },
   BSC: { color: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30", label: "BSC" },
+  HyperEVM: { color: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30", label: "HyperEVM" },
+  Katana: { color: "bg-pink-500/20 text-pink-400 border-pink-500/30", label: "Katana" },
+  Monad: { color: "bg-fuchsia-500/20 text-fuchsia-400 border-fuchsia-500/30", label: "Monad" },
+  "World Chain": { color: "bg-teal-500/20 text-teal-400 border-teal-500/30", label: "World Chain" },
 };
 
 const DEFAULT_CHAIN_STYLE = {
@@ -66,6 +70,7 @@ export function getChainLabel(chain: string): string {
 
 const PROTOCOL_LABELS: Record<string, string> = {
   "aave-v3": "Aave V3",
+  aave_v3: "Aave V3",
   "aave-v2": "Aave V2",
   "morpho-blue": "Morpho Blue",
   morpho: "Morpho",
@@ -97,6 +102,31 @@ export function getApyChangeColor(pct: number | null | undefined): string {
   return "text-[var(--text-secondary)]";
 }
 
+// ===== Yieldz helpers =====
+
+/** Convert lltv bps string (e.g. "8050") to ratio (0.805) */
+export function lltvBpsToRatio(lltv: string): number {
+  const n = Number(lltv);
+  if (isNaN(n) || n <= 0) return 0;
+  return n / 10000;
+}
+
+/** Effective leverage APY = (supplyApy - borrowApy * ltv) / (1 - ltv) */
+export function computeEffectiveLeverageApy(
+  supplyApy: number,
+  borrowApy: number,
+  ltvRatio: number,
+): number {
+  if (ltvRatio >= 1 || ltvRatio <= 0) return supplyApy;
+  return (supplyApy - borrowApy * ltvRatio) / (1 - ltvRatio);
+}
+
+/** Max leverage = 1 / (1 - ltv) */
+export function computeMaxLeverage(ltvRatio: number): number {
+  if (ltvRatio >= 1 || ltvRatio <= 0) return 1;
+  return 1 / (1 - ltvRatio);
+}
+
 // ===== Highlighted chains =====
 
 export const HIGHLIGHTED_CHAINS = [
@@ -104,8 +134,12 @@ export const HIGHLIGHTED_CHAINS = [
   "Arbitrum",
   "Base",
   "Optimism",
+  "HyperEVM",
+  "Monad",
   "Polygon",
   "Solana",
   "Avalanche",
   "BSC",
+  "Katana",
+  "World Chain",
 ];
